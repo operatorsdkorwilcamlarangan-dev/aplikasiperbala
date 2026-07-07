@@ -308,16 +308,7 @@ export default function App() {
 
         const dbStateStr = JSON.stringify(dbState);
 
-        // 1. STRICT GUARD: If there is a pending unsaved local change,
-        // do not let real-time listener overwrite our unsaved changes with older server data.
-        const hasPendingLocalChange = isLocalChange.current;
-
-        if (hasPendingLocalChange) {
-          console.log('Skipping real-time update because there are pending local changes.');
-          return;
-        }
-
-        // 2. OPTIMIZATION: If the incoming data is identical to what we have, skip redundant updates
+        // 1. OPTIMIZATION: If the incoming data is identical to what we have, skip redundant updates
         if (dbStateStr === lastSyncedData.current) {
           lastProcessedUpdatedAt.current = incomingUpdatedAt;
           localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
@@ -327,33 +318,110 @@ export default function App() {
           return;
         }
 
+        const liveState = localDbStateRef.current || {
+          schools: firestoreSchools,
+          operators: firestoreOperators,
+          monthlyPagu: firestoreMonthlyPagu,
+          rabList: firestoreRab,
+          transactions: firestoreTx,
+          tarikTunaiList: firestoreTarik,
+          systemConfig: firestoreConfig
+        };
+
+        let baseline: any = null;
+        try {
+          baseline = lastSyncedData.current ? JSON.parse(lastSyncedData.current) : null;
+        } catch (e) {
+          console.error('Error parsing baseline sync data:', e);
+        }
+
+        if (baseline) {
+          // Identify which collections have local unsaved modifications
+          const localSchoolsModified = JSON.stringify(liveState.schools) !== JSON.stringify(baseline.schools);
+          const localOperatorsModified = JSON.stringify(liveState.operators) !== JSON.stringify(baseline.operators);
+          const localMonthlyPaguModified = JSON.stringify(liveState.monthlyPagu) !== JSON.stringify(baseline.monthlyPagu);
+          const localRabModified = JSON.stringify(liveState.rabList) !== JSON.stringify(baseline.rabList);
+          const localTransactionsModified = JSON.stringify(liveState.transactions) !== JSON.stringify(baseline.transactions);
+          const localTarikTunaiModified = JSON.stringify(liveState.tarikTunaiList) !== JSON.stringify(baseline.tarikTunaiList);
+          const localSystemConfigModified = JSON.stringify(liveState.systemConfig) !== JSON.stringify(baseline.systemConfig);
+
+          // Update only unchanged collections with incoming remote data
+          if (!localSchoolsModified && JSON.stringify(liveState.schools) !== JSON.stringify(firestoreSchools)) {
+            rawSetSchools(firestoreSchools);
+            localStorage.setItem('perbala_schools', JSON.stringify(firestoreSchools));
+          }
+          if (!localOperatorsModified && JSON.stringify(liveState.operators) !== JSON.stringify(firestoreOperators)) {
+            rawSetOperators(firestoreOperators);
+            localStorage.setItem('perbala_operators', JSON.stringify(firestoreOperators));
+          }
+          if (!localMonthlyPaguModified && JSON.stringify(liveState.monthlyPagu) !== JSON.stringify(firestoreMonthlyPagu)) {
+            rawSetMonthlyPagu(firestoreMonthlyPagu);
+            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(firestoreMonthlyPagu));
+          }
+          if (!localRabModified && JSON.stringify(liveState.rabList) !== JSON.stringify(firestoreRab)) {
+            rawSetRabList(firestoreRab);
+            localStorage.setItem('perbala_rab', JSON.stringify(firestoreRab));
+          }
+          if (!localTransactionsModified && JSON.stringify(liveState.transactions) !== JSON.stringify(firestoreTx)) {
+            rawSetTransactions(firestoreTx);
+            localStorage.setItem('perbala_transactions', JSON.stringify(firestoreTx));
+          }
+          if (!localTarikTunaiModified && JSON.stringify(liveState.tarikTunaiList) !== JSON.stringify(firestoreTarik)) {
+            rawSetTarikTunaiList(firestoreTarik);
+            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(firestoreTarik));
+          }
+          if (!localSystemConfigModified && JSON.stringify(liveState.systemConfig) !== JSON.stringify(firestoreConfig)) {
+            rawSetSystemConfig(firestoreConfig);
+            localStorage.setItem('perbala_org_name', firestoreConfig.org_name);
+            localStorage.setItem('perbala_logo_preset', firestoreConfig.logo_preset);
+            localStorage.setItem('perbala_logo_url', firestoreConfig.logo_url || '');
+            localStorage.setItem('perbala_deadline_t1', firestoreConfig.deadline_t1);
+            localStorage.setItem('perbala_deadline_t2', firestoreConfig.deadline_t2);
+          }
+
+          // Construct the merged representation of what we have right now
+          const mergedState = {
+            schools: localSchoolsModified ? liveState.schools : firestoreSchools,
+            operators: localOperatorsModified ? liveState.operators : firestoreOperators,
+            monthlyPagu: localMonthlyPaguModified ? liveState.monthlyPagu : firestoreMonthlyPagu,
+            rabList: localRabModified ? liveState.rabList : firestoreRab,
+            transactions: localTransactionsModified ? liveState.transactions : firestoreTx,
+            tarikTunaiList: localTarikTunaiModified ? liveState.tarikTunaiList : firestoreTarik,
+            systemConfig: localSystemConfigModified ? liveState.systemConfig : firestoreConfig
+          };
+
+          const hasAnyLocalModifications = localSchoolsModified || localOperatorsModified || localMonthlyPaguModified || localRabModified || localTransactionsModified || localTarikTunaiModified || localSystemConfigModified;
+          isLocalChange.current = hasAnyLocalModifications;
+
+          lastSyncedData.current = JSON.stringify(mergedState);
+        } else {
+          // No baseline yet, adopt remote state entirely
+          lastSyncedData.current = dbStateStr;
+          isLocalChange.current = false;
+          
+          rawSetSchools(firestoreSchools);
+          rawSetOperators(firestoreOperators);
+          rawSetMonthlyPagu(firestoreMonthlyPagu);
+          rawSetRabList(firestoreRab);
+          rawSetTransactions(firestoreTx);
+          rawSetTarikTunaiList(firestoreTarik);
+          rawSetSystemConfig(firestoreConfig);
+
+          localStorage.setItem('perbala_schools', JSON.stringify(firestoreSchools));
+          localStorage.setItem('perbala_operators', JSON.stringify(firestoreOperators));
+          localStorage.setItem('perbala_monthly_pagu', JSON.stringify(firestoreMonthlyPagu));
+          localStorage.setItem('perbala_rab', JSON.stringify(firestoreRab));
+          localStorage.setItem('perbala_transactions', JSON.stringify(firestoreTx));
+          localStorage.setItem('perbala_tarik_tunai', JSON.stringify(firestoreTarik));
+          localStorage.setItem('perbala_org_name', firestoreConfig.org_name);
+          localStorage.setItem('perbala_logo_preset', firestoreConfig.logo_preset);
+          localStorage.setItem('perbala_logo_url', firestoreConfig.logo_url || '');
+          localStorage.setItem('perbala_deadline_t1', firestoreConfig.deadline_t1);
+          localStorage.setItem('perbala_deadline_t2', firestoreConfig.deadline_t2);
+        }
+
         lastProcessedUpdatedAt.current = incomingUpdatedAt;
         localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
-
-        isLocalChange.current = false; // Prevent writeback loop on incoming remote state changes
-        lastSyncedData.current = dbStateStr;
-
-        // Update React states using raw setters to prevent flagging this as a local/user change
-        rawSetSchools(dbState.schools);
-        rawSetOperators(dbState.operators);
-        rawSetMonthlyPagu(dbState.monthlyPagu);
-        rawSetRabList(dbState.rabList);
-        rawSetTransactions(dbState.transactions);
-        rawSetTarikTunaiList(dbState.tarikTunaiList);
-        rawSetSystemConfig(dbState.systemConfig);
-
-        // Update LocalStorage
-        localStorage.setItem('perbala_schools', JSON.stringify(dbState.schools));
-        localStorage.setItem('perbala_operators', JSON.stringify(dbState.operators));
-        localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbState.monthlyPagu));
-        localStorage.setItem('perbala_rab', JSON.stringify(dbState.rabList));
-        localStorage.setItem('perbala_transactions', JSON.stringify(dbState.transactions));
-        localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbState.tarikTunaiList));
-        localStorage.setItem('perbala_org_name', dbState.systemConfig.org_name);
-        localStorage.setItem('perbala_logo_preset', dbState.systemConfig.logo_preset);
-        localStorage.setItem('perbala_logo_url', dbState.systemConfig.logo_url || '');
-        localStorage.setItem('perbala_deadline_t1', dbState.systemConfig.deadline_t1);
-        localStorage.setItem('perbala_deadline_t2', dbState.systemConfig.deadline_t2);
 
         setSyncStatus('active');
         setLastSyncTime(new Date());
@@ -828,14 +896,6 @@ export default function App() {
     let pollingInterval: any = null;
 
     const runPoll = async () => {
-      // 1. If user is currently in the middle of typing / editing (isLocalChange is true),
-      // we must skip parsing incoming poll data to prevent overwriting their unsaved inputs.
-      const hasPendingLocalChange = isLocalChange.current;
-      
-      if (hasPendingLocalChange) {
-        return;
-      }
-
       try {
         const response = await fetch('/api/local-db');
         if (!response.ok) {
@@ -843,18 +903,26 @@ export default function App() {
         }
         const localData = await response.json();
         if (localData && localData.success) {
+          const firestoreSchools = localData.schools || initialSchools;
+          const firestoreOperators = localData.operators || initialOperators;
+          const firestoreMonthlyPagu = localData.monthlyPagu || initialMonthlyPagu;
+          const firestoreRab = localData.rabList || initialRAB;
+          const firestoreTx = localData.transactions || initialTransactions;
+          const firestoreTarik = localData.tarikTunaiList || initialTarikTunai;
+          const firestoreConfig = localData.systemConfig || defaultSystemConfig;
+          const incomingUpdatedAt = localData.updatedAt || 0;
+
           const dbState = {
-            schools: localData.schools || initialSchools,
-            operators: localData.operators || initialOperators,
-            monthlyPagu: localData.monthlyPagu || initialMonthlyPagu,
-            rabList: localData.rabList || initialRAB,
-            transactions: localData.transactions || initialTransactions,
-            tarikTunaiList: localData.tarikTunaiList || initialTarikTunai,
-            systemConfig: localData.systemConfig || defaultSystemConfig
+            schools: firestoreSchools,
+            operators: firestoreOperators,
+            monthlyPagu: firestoreMonthlyPagu,
+            rabList: firestoreRab,
+            transactions: firestoreTx,
+            tarikTunaiList: firestoreTarik,
+            systemConfig: firestoreConfig
           };
 
           const dbStateStr = JSON.stringify(dbState);
-          const incomingUpdatedAt = localData.updatedAt || 0;
 
           // 2. OPTIMIZATION: If the incoming data is identical to what we have, skip redundant updates
           if (dbStateStr === lastSyncedData.current) {
@@ -870,32 +938,111 @@ export default function App() {
             return;
           }
 
+          const liveState = localDbStateRef.current || {
+            schools: firestoreSchools,
+            operators: firestoreOperators,
+            monthlyPagu: firestoreMonthlyPagu,
+            rabList: firestoreRab,
+            transactions: firestoreTx,
+            tarikTunaiList: firestoreTarik,
+            systemConfig: firestoreConfig
+          };
+
+          let baseline: any = null;
+          try {
+            baseline = lastSyncedData.current ? JSON.parse(lastSyncedData.current) : null;
+          } catch (e) {
+            console.error('Error parsing baseline sync data:', e);
+          }
+
+          if (baseline) {
+            // Identify which collections have local unsaved modifications
+            const localSchoolsModified = JSON.stringify(liveState.schools) !== JSON.stringify(baseline.schools);
+            const localOperatorsModified = JSON.stringify(liveState.operators) !== JSON.stringify(baseline.operators);
+            const localMonthlyPaguModified = JSON.stringify(liveState.monthlyPagu) !== JSON.stringify(baseline.monthlyPagu);
+            const localRabModified = JSON.stringify(liveState.rabList) !== JSON.stringify(baseline.rabList);
+            const localTransactionsModified = JSON.stringify(liveState.transactions) !== JSON.stringify(baseline.transactions);
+            const localTarikTunaiModified = JSON.stringify(liveState.tarikTunaiList) !== JSON.stringify(baseline.tarikTunaiList);
+            const localSystemConfigModified = JSON.stringify(liveState.systemConfig) !== JSON.stringify(baseline.systemConfig);
+
+            // Update only unchanged collections with incoming remote data
+            if (!localSchoolsModified && JSON.stringify(liveState.schools) !== JSON.stringify(firestoreSchools)) {
+              rawSetSchools(firestoreSchools);
+              localStorage.setItem('perbala_schools', JSON.stringify(firestoreSchools));
+            }
+            if (!localOperatorsModified && JSON.stringify(liveState.operators) !== JSON.stringify(firestoreOperators)) {
+              rawSetOperators(firestoreOperators);
+              localStorage.setItem('perbala_operators', JSON.stringify(firestoreOperators));
+            }
+            if (!localMonthlyPaguModified && JSON.stringify(liveState.monthlyPagu) !== JSON.stringify(firestoreMonthlyPagu)) {
+              rawSetMonthlyPagu(firestoreMonthlyPagu);
+              localStorage.setItem('perbala_monthly_pagu', JSON.stringify(firestoreMonthlyPagu));
+            }
+            if (!localRabModified && JSON.stringify(liveState.rabList) !== JSON.stringify(firestoreRab)) {
+              rawSetRabList(firestoreRab);
+              localStorage.setItem('perbala_rab', JSON.stringify(firestoreRab));
+            }
+            if (!localTransactionsModified && JSON.stringify(liveState.transactions) !== JSON.stringify(firestoreTx)) {
+              rawSetTransactions(firestoreTx);
+              localStorage.setItem('perbala_transactions', JSON.stringify(firestoreTx));
+            }
+            if (!localTarikTunaiModified && JSON.stringify(liveState.tarikTunaiList) !== JSON.stringify(firestoreTarik)) {
+              rawSetTarikTunaiList(firestoreTarik);
+              localStorage.setItem('perbala_tarik_tunai', JSON.stringify(firestoreTarik));
+            }
+            if (!localSystemConfigModified && JSON.stringify(liveState.systemConfig) !== JSON.stringify(firestoreConfig)) {
+              rawSetSystemConfig(firestoreConfig);
+              localStorage.setItem('perbala_org_name', firestoreConfig.org_name);
+              localStorage.setItem('perbala_logo_preset', firestoreConfig.logo_preset);
+              localStorage.setItem('perbala_logo_url', firestoreConfig.logo_url || '');
+              localStorage.setItem('perbala_deadline_t1', firestoreConfig.deadline_t1);
+              localStorage.setItem('perbala_deadline_t2', firestoreConfig.deadline_t2);
+            }
+
+            // Construct the merged representation of what we have right now
+            const mergedState = {
+              schools: localSchoolsModified ? liveState.schools : firestoreSchools,
+              operators: localOperatorsModified ? liveState.operators : firestoreOperators,
+              monthlyPagu: localMonthlyPaguModified ? liveState.monthlyPagu : firestoreMonthlyPagu,
+              rabList: localRabModified ? liveState.rabList : firestoreRab,
+              transactions: localTransactionsModified ? liveState.transactions : firestoreTx,
+              tarikTunaiList: localTarikTunaiModified ? liveState.tarikTunaiList : firestoreTarik,
+              systemConfig: localSystemConfigModified ? liveState.systemConfig : firestoreConfig
+            };
+
+            const hasAnyLocalModifications = localSchoolsModified || localOperatorsModified || localMonthlyPaguModified || localRabModified || localTransactionsModified || localTarikTunaiModified || localSystemConfigModified;
+            isLocalChange.current = hasAnyLocalModifications;
+
+            lastSyncedData.current = JSON.stringify(mergedState);
+          } else {
+            // No baseline yet, adopt remote state entirely
+            lastSyncedData.current = dbStateStr;
+            isLocalChange.current = false;
+            
+            rawSetSchools(firestoreSchools);
+            rawSetOperators(firestoreOperators);
+            rawSetMonthlyPagu(firestoreMonthlyPagu);
+            rawSetRabList(firestoreRab);
+            rawSetTransactions(firestoreTx);
+            rawSetTarikTunaiList(firestoreTarik);
+            rawSetSystemConfig(firestoreConfig);
+
+            localStorage.setItem('perbala_schools', JSON.stringify(firestoreSchools));
+            localStorage.setItem('perbala_operators', JSON.stringify(firestoreOperators));
+            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(firestoreMonthlyPagu));
+            localStorage.setItem('perbala_rab', JSON.stringify(firestoreRab));
+            localStorage.setItem('perbala_transactions', JSON.stringify(firestoreTx));
+            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(firestoreTarik));
+            localStorage.setItem('perbala_org_name', firestoreConfig.org_name);
+            localStorage.setItem('perbala_logo_preset', firestoreConfig.logo_preset);
+            localStorage.setItem('perbala_logo_url', firestoreConfig.logo_url || '');
+            localStorage.setItem('perbala_deadline_t1', firestoreConfig.deadline_t1);
+            localStorage.setItem('perbala_deadline_t2', firestoreConfig.deadline_t2);
+          }
+
           console.log('Local DB polling updated state successfully from server backup (1.5s real-time).');
-          isLocalChange.current = false;
-          lastSyncedData.current = dbStateStr;
           lastProcessedUpdatedAt.current = incomingUpdatedAt;
           localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
-
-          rawSetSchools(dbState.schools);
-          rawSetOperators(dbState.operators);
-          rawSetMonthlyPagu(dbState.monthlyPagu);
-          rawSetRabList(dbState.rabList);
-          rawSetTransactions(dbState.transactions);
-          rawSetTarikTunaiList(dbState.tarikTunaiList);
-          rawSetSystemConfig(dbState.systemConfig);
-
-          // Sync with localStorage
-          localStorage.setItem('perbala_schools', JSON.stringify(dbState.schools));
-          localStorage.setItem('perbala_operators', JSON.stringify(dbState.operators));
-          localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbState.monthlyPagu));
-          localStorage.setItem('perbala_rab', JSON.stringify(dbState.rabList));
-          localStorage.setItem('perbala_transactions', JSON.stringify(dbState.transactions));
-          localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbState.tarikTunaiList));
-          localStorage.setItem('perbala_org_name', dbState.systemConfig.org_name);
-          localStorage.setItem('perbala_logo_preset', dbState.systemConfig.logo_preset);
-          localStorage.setItem('perbala_logo_url', dbState.systemConfig.logo_url || '');
-          localStorage.setItem('perbala_deadline_t1', dbState.systemConfig.deadline_t1);
-          localStorage.setItem('perbala_deadline_t2', dbState.systemConfig.deadline_t2);
 
           setLastSyncTime(new Date());
           isInitialLoaded.current = true;
