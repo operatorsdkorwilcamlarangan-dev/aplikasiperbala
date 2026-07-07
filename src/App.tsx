@@ -231,6 +231,7 @@ export default function App() {
 
   const isInitialLoaded = useRef(false);
   const lastSyncedData = useRef<string | null>(null);
+  const localDbStateRef = useRef<any>(null);
   const firestoreUnsubscribeRef = useRef<(() => void) | null>(null);
   const retryTimeoutRef = useRef<any>(null);
 
@@ -298,7 +299,10 @@ export default function App() {
 
         // 1. STRICT GUARD: If there is a pending unsaved local change,
         // do not let real-time listener overwrite our unsaved changes with older server data.
-        if (isLocalChange.current) {
+        const currentLocalStateStr = localDbStateRef.current ? JSON.stringify(localDbStateRef.current) : null;
+        const hasPendingLocalChange = isLocalChange.current || (currentLocalStateStr && currentLocalStateStr !== lastSyncedData.current);
+
+        if (hasPendingLocalChange) {
           console.log('Skipping real-time update because there are pending local changes.');
           return;
         }
@@ -677,9 +681,6 @@ export default function App() {
     localStorage.setItem('perbala_transactions', JSON.stringify(transactions));
     localStorage.setItem('perbala_tarik_tunai', JSON.stringify(tarikTunaiList));
 
-    if (!isInitialLoaded.current) return;
-    if (!isLocalChange.current) return; // STRICTLY Gated: Only save if there was a user-initiated change
-
     const currentDbState = {
       schools,
       operators,
@@ -689,12 +690,19 @@ export default function App() {
       tarikTunaiList,
       systemConfig
     };
+    localDbStateRef.current = currentDbState;
+
+    if (!isInitialLoaded.current) return;
+
     const currentDbStateStr = JSON.stringify(currentDbState);
 
     // Skip if identical to what we last synced (to prevent write loops)
     if (currentDbStateStr === lastSyncedData.current) {
+      isLocalChange.current = false; // Reset local change flag when we are in sync
       return;
     }
+
+    if (!isLocalChange.current) return; // STRICTLY Gated: Only save if there was a user-initiated change
 
     // Debounce cloud persistence by 1.5 seconds to prevent rate limiting & save collision issues
     const debounceTimer = setTimeout(() => {
