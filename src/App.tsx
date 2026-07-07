@@ -310,31 +310,20 @@ export default function App() {
 
         // 1. STRICT GUARD: If there is a pending unsaved local change,
         // do not let real-time listener overwrite our unsaved changes with older server data.
-        const currentLocalStateStr = localDbStateRef.current ? JSON.stringify(localDbStateRef.current) : null;
-        const hasPendingLocalChange = isLocalChange.current || (currentLocalStateStr && currentLocalStateStr !== lastSyncedData.current);
+        const hasPendingLocalChange = isLocalChange.current;
 
         if (hasPendingLocalChange) {
           console.log('Skipping real-time update because there are pending local changes.');
           return;
         }
 
-        // Guard against older states using updatedAt (ensure we only apply newer server states)
-        const isNewer = !isInitialLoaded.current || incomingUpdatedAt > lastProcessedUpdatedAt.current;
-        
         // 2. OPTIMIZATION: If the incoming data is identical to what we have, skip redundant updates
         if (dbStateStr === lastSyncedData.current) {
-          if (incomingUpdatedAt > lastProcessedUpdatedAt.current) {
-            lastProcessedUpdatedAt.current = incomingUpdatedAt;
-            localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
-          }
+          lastProcessedUpdatedAt.current = incomingUpdatedAt;
+          localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
           setSyncStatus('active');
           setLastSyncTime(new Date());
           isInitialLoaded.current = true;
-          return;
-        }
-
-        if (!isNewer) {
-          console.log('Skipping real-time snapshot because it is older than or equal to current processed version.');
           return;
         }
 
@@ -841,8 +830,7 @@ export default function App() {
     const runPoll = async () => {
       // 1. If user is currently in the middle of typing / editing (isLocalChange is true),
       // we must skip parsing incoming poll data to prevent overwriting their unsaved inputs.
-      const currentLocalStateStr = localDbStateRef.current ? JSON.stringify(localDbStateRef.current) : null;
-      const hasPendingLocalChange = isLocalChange.current || (currentLocalStateStr && currentLocalStateStr !== lastSyncedData.current);
+      const hasPendingLocalChange = isLocalChange.current;
       
       if (hasPendingLocalChange) {
         return;
@@ -867,53 +855,11 @@ export default function App() {
 
           const dbStateStr = JSON.stringify(dbState);
           const incomingUpdatedAt = localData.updatedAt || 0;
-          
-          // Check if this polled update is actually newer than what we have already processed
-          const isNewer = !isInitialLoaded.current || incomingUpdatedAt > lastProcessedUpdatedAt.current;
 
-          // If the fetched state is different from what we last synced, and it is newer, update local state
-          if (dbStateStr !== lastSyncedData.current && isNewer) {
-            console.log('Local DB polling updated state successfully from server backup (1.5s real-time).');
-            isLocalChange.current = false;
-            lastSyncedData.current = dbStateStr;
+          // 2. OPTIMIZATION: If the incoming data is identical to what we have, skip redundant updates
+          if (dbStateStr === lastSyncedData.current) {
             lastProcessedUpdatedAt.current = incomingUpdatedAt;
             localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
-
-            rawSetSchools(dbState.schools);
-            rawSetOperators(dbState.operators);
-            rawSetMonthlyPagu(dbState.monthlyPagu);
-            rawSetRabList(dbState.rabList);
-            rawSetTransactions(dbState.transactions);
-            rawSetTarikTunaiList(dbState.tarikTunaiList);
-            rawSetSystemConfig(dbState.systemConfig);
-
-            // Sync with localStorage
-            localStorage.setItem('perbala_schools', JSON.stringify(dbState.schools));
-            localStorage.setItem('perbala_operators', JSON.stringify(dbState.operators));
-            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbState.monthlyPagu));
-            localStorage.setItem('perbala_rab', JSON.stringify(dbState.rabList));
-            localStorage.setItem('perbala_transactions', JSON.stringify(dbState.transactions));
-            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbState.tarikTunaiList));
-            localStorage.setItem('perbala_org_name', dbState.systemConfig.org_name);
-            localStorage.setItem('perbala_logo_preset', dbState.systemConfig.logo_preset);
-            localStorage.setItem('perbala_logo_url', dbState.systemConfig.logo_url || '');
-            localStorage.setItem('perbala_deadline_t1', dbState.systemConfig.deadline_t1);
-            localStorage.setItem('perbala_deadline_t2', dbState.systemConfig.deadline_t2);
-
-            setLastSyncTime(new Date());
-            isInitialLoaded.current = true;
-
-            // If we are in 'error' state but local-db is working, we can transition to 'simulator' (Local Sync Active)
-            if (syncStatus === 'error') {
-              setSyncStatus('simulator');
-              setSyncErrorReason('Kuota server awan terlampaui atau terputus. Menggunakan sinkronisasi cadangan lokal.');
-            }
-          } else {
-            // If we didn't apply because it wasn't newer, but the state is identical and we want to advance updatedAt
-            if (dbStateStr === lastSyncedData.current && incomingUpdatedAt > lastProcessedUpdatedAt.current) {
-              lastProcessedUpdatedAt.current = incomingUpdatedAt;
-              localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
-            }
 
             // Even if data is identical, if we were in 'error' status but local polling is succeeding, 
             // promote status to 'simulator' to clear the scary red warning badge!
@@ -921,6 +867,43 @@ export default function App() {
               setSyncStatus('simulator');
               setSyncErrorReason('Kuota server awan terlampaui atau terputus. Menggunakan sinkronisasi cadangan lokal.');
             }
+            return;
+          }
+
+          console.log('Local DB polling updated state successfully from server backup (1.5s real-time).');
+          isLocalChange.current = false;
+          lastSyncedData.current = dbStateStr;
+          lastProcessedUpdatedAt.current = incomingUpdatedAt;
+          localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
+
+          rawSetSchools(dbState.schools);
+          rawSetOperators(dbState.operators);
+          rawSetMonthlyPagu(dbState.monthlyPagu);
+          rawSetRabList(dbState.rabList);
+          rawSetTransactions(dbState.transactions);
+          rawSetTarikTunaiList(dbState.tarikTunaiList);
+          rawSetSystemConfig(dbState.systemConfig);
+
+          // Sync with localStorage
+          localStorage.setItem('perbala_schools', JSON.stringify(dbState.schools));
+          localStorage.setItem('perbala_operators', JSON.stringify(dbState.operators));
+          localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbState.monthlyPagu));
+          localStorage.setItem('perbala_rab', JSON.stringify(dbState.rabList));
+          localStorage.setItem('perbala_transactions', JSON.stringify(dbState.transactions));
+          localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbState.tarikTunaiList));
+          localStorage.setItem('perbala_org_name', dbState.systemConfig.org_name);
+          localStorage.setItem('perbala_logo_preset', dbState.systemConfig.logo_preset);
+          localStorage.setItem('perbala_logo_url', dbState.systemConfig.logo_url || '');
+          localStorage.setItem('perbala_deadline_t1', dbState.systemConfig.deadline_t1);
+          localStorage.setItem('perbala_deadline_t2', dbState.systemConfig.deadline_t2);
+
+          setLastSyncTime(new Date());
+          isInitialLoaded.current = true;
+
+          // If we are in 'error' state but local-db is working, we can transition to 'simulator' (Local Sync Active)
+          if (syncStatus === 'error') {
+            setSyncStatus('simulator');
+            setSyncErrorReason('Kuota server awan terlampaui atau terputus. Menggunakan sinkronisasi cadangan lokal.');
           }
         }
       } catch (err) {
