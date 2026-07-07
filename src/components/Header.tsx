@@ -16,7 +16,7 @@ interface HeaderProps {
   onLogout: () => void;
   systemName: string;
   apiUrl?: string;
-  syncStatus?: 'active' | 'simulator' | 'error' | 'syncing';
+  syncStatus?: 'active' | 'simulator' | 'error' | 'syncing' | 'offline';
   lastSyncTime?: Date | null;
   onManualSync?: () => void;
   syncErrorReason?: string | null;
@@ -75,6 +75,25 @@ export default function Header({
           <div className="hidden lg:flex items-center gap-2 bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-xl text-purple-700 font-bold text-[11px] h-9 shadow-sm">
             <RefreshCw className="w-3.5 h-3.5 text-purple-500 animate-spin" />
             <span>Sinkronisasi Awan...</span>
+          </div>
+        );
+      case 'offline':
+        return (
+          <div className="hidden lg:flex items-center gap-2.5 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-xl text-amber-700 font-bold text-[11px] h-9 shadow-sm cursor-help" title="Perangkat sedang luring. Perubahan disimpan secara lokal di browser Anda.">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+            <CloudOff className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+            <span>Mode Luring Aktif {timeString && `(${timeString})`}</span>
+            <button
+              onClick={onManualSync}
+              type="button"
+              title="Coba hubungkan kembali sekarang"
+              className="p-1 hover:bg-amber-100 rounded-lg text-amber-600 transition"
+            >
+              <RefreshCw className="w-3 h-3 hover:rotate-180 duration-500 transition-transform" />
+            </button>
           </div>
         );
       case 'error':

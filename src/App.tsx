@@ -192,7 +192,7 @@ export default function App() {
     isLocalChange.current = true;
     rawSetSystemConfig(val);
   };
-  const [syncStatus, setSyncStatus] = useState<'active' | 'error' | 'syncing'>('active');
+  const [syncStatus, setSyncStatus] = useState<'active' | 'simulator' | 'error' | 'syncing' | 'offline'>('active');
   const [syncErrorReason, setSyncErrorReason] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(new Date());
 
@@ -240,6 +240,7 @@ export default function App() {
   const [importType, setImportType] = useState<'schools' | 'operators'>('schools');
 
   const isInitialLoaded = useRef(false);
+  const isCloudUnavailable = useRef(false);
   const lastSyncedData = useRef<string | null>(null);
   const localDbStateRef = useRef<any>(null);
   const firestoreUnsubscribeRef = useRef<(() => void) | null>(null);
@@ -459,6 +460,7 @@ export default function App() {
       }
     }, (err: any) => {
       console.warn('Firestore subscription connection issue/error:', err);
+      isCloudUnavailable.current = true;
       
       const isQuotaExceeded = err && (
         err.code === 'quota-exceeded' || 
@@ -555,6 +557,7 @@ export default function App() {
     setSyncStatus('syncing');
     setSyncErrorReason(null);
     if (isManual) {
+      isCloudUnavailable.current = false;
       addToast('Menghubungkan', 'Mengambil data terbaru dari server awan...', 'info');
     }
     try {
@@ -655,12 +658,14 @@ export default function App() {
         }
       }
       
+      isCloudUnavailable.current = false;
       // Keep real-time snapshot subscription active
       startFirestoreSync(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, false);
       setIsLoadingData(false);
     } catch (err: any) {
       console.warn('Failed manual pull from Firestore, attempting fallback to local server-side backup API...', err);
       setIsLoadingData(false);
+      isCloudUnavailable.current = true;
       
       const isQuotaExceeded = err && (
         err.code === 'quota-exceeded' || 
@@ -726,7 +731,40 @@ export default function App() {
           throw new Error('Database server backup did not return success');
         }
       } catch (backupErr) {
-        console.error('Failed to load database from local backup server:', backupErr);
+        console.error('Failed to load database from local backup server, checking localStorage:', backupErr);
+        
+        // Ultimate Local Storage Offline Fallback
+        try {
+          const cachedSchools = localStorage.getItem('perbala_schools');
+          const cachedOperators = localStorage.getItem('perbala_operators');
+          
+          if (cachedSchools && cachedOperators) {
+            const cachedPagu = localStorage.getItem('perbala_monthly_pagu');
+            const cachedRab = localStorage.getItem('perbala_rab');
+            const cachedTx = localStorage.getItem('perbala_transactions');
+            const cachedTarik = localStorage.getItem('perbala_tarik_tunai');
+            
+            rawSetSchools(JSON.parse(cachedSchools));
+            rawSetOperators(JSON.parse(cachedOperators));
+            if (cachedPagu) rawSetMonthlyPagu(JSON.parse(cachedPagu));
+            if (cachedRab) rawSetRabList(JSON.parse(cachedRab));
+            if (cachedTx) rawSetTransactions(JSON.parse(cachedTx));
+            if (cachedTarik) rawSetTarikTunaiList(JSON.parse(cachedTarik));
+            
+            setSyncStatus('offline');
+            setSyncErrorReason('Perangkat sedang luring. Menggunakan basis data luring perangkat.');
+            setLastSyncTime(new Date());
+            isInitialLoaded.current = true;
+            
+            if (isManual) {
+              addToast('Mode Luring Aktif', 'Menggunakan basis data lokal browser karena tidak ada koneksi internet.', 'warning');
+            }
+            return;
+          }
+        } catch (storageErr) {
+          console.error('Failed to parse localStorage offline backup:', storageErr);
+        }
+
         setSyncStatus('error');
         setSyncErrorReason(errReason);
         if (isManual) {
@@ -841,8 +879,8 @@ export default function App() {
           updatedAt: commitUpdatedAt
         };
 
-        // If we are currently in 'simulator' mode, we bypass cloud and directly save to local backup server
-        if (syncStatus === 'simulator') {
+        // If we are currently in 'simulator' or 'offline' mode, or the cloud is unavailable, we bypass cloud and directly save to local backup server
+        if (isCloudUnavailable.current || syncStatus === 'simulator' || syncStatus === 'offline') {
           saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, commitUpdatedAt)
             .then((success) => {
               if (success) {
