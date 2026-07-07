@@ -180,7 +180,7 @@ app.get('/api/local-db', async (req, res) => {
 
 // Save general database
 app.post('/api/local-db', async (req, res) => {
-  const { schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig } = req.body;
+  const { schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, updatedAt } = req.body;
   
   try {
     const current = await loadDatabase();
@@ -192,7 +192,8 @@ app.post('/api/local-db', async (req, res) => {
       rabList: rabList || current.rabList || initialRAB,
       transactions: transactions || current.transactions || initialTransactions,
       tarikTunaiList: tarikTunaiList || current.tarikTunaiList || initialTarikTunai,
-      systemConfig: systemConfig || current.systemConfig || defaultSystemConfig
+      systemConfig: systemConfig || current.systemConfig || defaultSystemConfig,
+      updatedAt: updatedAt || current.updatedAt || Date.now()
     };
     
     await saveDatabase(updated);

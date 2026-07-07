@@ -152,6 +152,16 @@ export default function App() {
 
   // Local change tracking ref to strictly gate Firestore write-back triggers
   const isLocalChange = useRef(false);
+  const lastProcessedUpdatedAt = useRef<number>(
+    (() => {
+      try {
+        const stored = localStorage.getItem('perbala_updated_at');
+        return stored ? parseInt(stored, 10) : 0;
+      } catch {
+        return 0;
+      }
+    })()
+  );
 
   // Wrapped state setters that flag the change as user-initiated / local
   const setSchools = (val: School[] | ((prev: School[]) => School[])) => {
@@ -283,6 +293,7 @@ export default function App() {
         const firestoreTx = data.transactions || initialTransactions;
         const firestoreTarik = data.tarikTunaiList || initialTarikTunai;
         const firestoreConfig = data.systemConfig || defaultSystemConfig;
+        const incomingUpdatedAt = data.updatedAt || 0;
 
         // Directly adopt the Firestore data as the absolute source of truth.
         const dbState = {
@@ -307,13 +318,28 @@ export default function App() {
           return;
         }
 
+        // Guard against older states using updatedAt (ensure we only apply newer server states)
+        const isNewer = !isInitialLoaded.current || incomingUpdatedAt > lastProcessedUpdatedAt.current;
+        
         // 2. OPTIMIZATION: If the incoming data is identical to what we have, skip redundant updates
         if (dbStateStr === lastSyncedData.current) {
+          if (incomingUpdatedAt > lastProcessedUpdatedAt.current) {
+            lastProcessedUpdatedAt.current = incomingUpdatedAt;
+            localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
+          }
           setSyncStatus('active');
           setLastSyncTime(new Date());
           isInitialLoaded.current = true;
           return;
         }
+
+        if (!isNewer) {
+          console.log('Skipping real-time snapshot because it is older than or equal to current processed version.');
+          return;
+        }
+
+        lastProcessedUpdatedAt.current = incomingUpdatedAt;
+        localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
 
         isLocalChange.current = false; // Prevent writeback loop on incoming remote state changes
         lastSyncedData.current = dbStateStr;
@@ -500,6 +526,10 @@ export default function App() {
         };
         
         // Block save useEffect from triggering on these initial loads
+        const incomingUpdatedAt = data.updatedAt || 0;
+        lastProcessedUpdatedAt.current = incomingUpdatedAt;
+        localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
+        
         isLocalChange.current = false;
         lastSyncedData.current = JSON.stringify(dbState);
 
@@ -534,6 +564,10 @@ export default function App() {
         }
       } else {
         // Document doesn't exist, create it with current states
+        const initialUpdatedAt = Date.now();
+        lastProcessedUpdatedAt.current = initialUpdatedAt;
+        localStorage.setItem('perbala_updated_at', initialUpdatedAt.toString());
+
         const defaultDb = {
           schools,
           operators,
@@ -541,9 +575,18 @@ export default function App() {
           rabList,
           transactions,
           tarikTunaiList,
-          systemConfig
+          systemConfig,
+          updatedAt: initialUpdatedAt
         };
-        lastSyncedData.current = JSON.stringify(defaultDb);
+        lastSyncedData.current = JSON.stringify({
+          schools,
+          operators,
+          monthlyPagu,
+          rabList,
+          transactions,
+          tarikTunaiList,
+          systemConfig
+        });
         await setDoc(docRef, defaultDb);
         
         setSyncStatus('active');
@@ -586,6 +629,10 @@ export default function App() {
             tarikTunaiList: localData.tarikTunaiList || initialTarikTunai,
             systemConfig: localData.systemConfig || defaultSystemConfig
           };
+
+          const incomingUpdatedAt = localData.updatedAt || 0;
+          lastProcessedUpdatedAt.current = incomingUpdatedAt;
+          localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
 
           isLocalChange.current = false;
           lastSyncedData.current = JSON.stringify(dbState);
@@ -640,7 +687,8 @@ export default function App() {
     currentRab = rabList,
     currentTx = transactions,
     currentTarik = tarikTunaiList,
-    currentConfig = systemConfig
+    currentConfig = systemConfig,
+    currentUpdatedAt = lastProcessedUpdatedAt.current
   ) => {
     try {
       const response = await fetch('/api/local-db', {
@@ -653,7 +701,8 @@ export default function App() {
           rabList: currentRab,
           transactions: currentTx,
           tarikTunaiList: currentTarik,
-          systemConfig: currentConfig
+          systemConfig: currentConfig,
+          updatedAt: currentUpdatedAt
         })
       });
       if (!response.ok) {
@@ -720,9 +769,24 @@ export default function App() {
         lastSyncedData.current = currentDbStateStr;
         isLocalChange.current = false; // Reset local change flag because we are committing to save this specific state
         
+        const commitUpdatedAt = Date.now();
+        lastProcessedUpdatedAt.current = commitUpdatedAt;
+        localStorage.setItem('perbala_updated_at', commitUpdatedAt.toString());
+
+        const stateToSave = {
+          schools,
+          operators,
+          monthlyPagu,
+          rabList,
+          transactions,
+          tarikTunaiList,
+          systemConfig,
+          updatedAt: commitUpdatedAt
+        };
+
         // If we are currently in 'simulator' mode, we bypass cloud and directly save to local backup server
         if (syncStatus === 'simulator') {
-          saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig)
+          saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, commitUpdatedAt)
             .then((success) => {
               if (success) {
                 setSyncStatus('simulator');
@@ -734,10 +798,12 @@ export default function App() {
         } else {
           setSyncStatus('syncing');
           const docRef = doc(db, 'app_data', 'database');
-          setDoc(docRef, currentDbState)
+          setDoc(docRef, stateToSave)
             .then(() => {
               setSyncStatus('active');
               setLastSyncTime(new Date());
+              // Update local server backup in parallel for real-time dual-channel speed!
+              saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, commitUpdatedAt);
             })
             .catch((err) => {
               console.error('Failed to save to Firestore, trying local server backup fallback:', err);
@@ -751,7 +817,7 @@ export default function App() {
                 setSyncErrorReason('Kuota server awan terlampaui. Menggunakan basis data cadangan lokal.');
               }
               
-              saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig)
+              saveDatabaseToServer(schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, commitUpdatedAt)
                 .then((success) => {
                   if (success) {
                     setSyncStatus('simulator');
@@ -800,12 +866,18 @@ export default function App() {
           };
 
           const dbStateStr = JSON.stringify(dbState);
+          const incomingUpdatedAt = localData.updatedAt || 0;
+          
+          // Check if this polled update is actually newer than what we have already processed
+          const isNewer = !isInitialLoaded.current || incomingUpdatedAt > lastProcessedUpdatedAt.current;
 
-          // If the fetched state is different from what we last synced, update local state
-          if (dbStateStr !== lastSyncedData.current) {
+          // If the fetched state is different from what we last synced, and it is newer, update local state
+          if (dbStateStr !== lastSyncedData.current && isNewer) {
             console.log('Local DB polling updated state successfully from server backup (1.5s real-time).');
             isLocalChange.current = false;
             lastSyncedData.current = dbStateStr;
+            lastProcessedUpdatedAt.current = incomingUpdatedAt;
+            localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
 
             rawSetSchools(dbState.schools);
             rawSetOperators(dbState.operators);
@@ -837,6 +909,12 @@ export default function App() {
               setSyncErrorReason('Kuota server awan terlampaui atau terputus. Menggunakan sinkronisasi cadangan lokal.');
             }
           } else {
+            // If we didn't apply because it wasn't newer, but the state is identical and we want to advance updatedAt
+            if (dbStateStr === lastSyncedData.current && incomingUpdatedAt > lastProcessedUpdatedAt.current) {
+              lastProcessedUpdatedAt.current = incomingUpdatedAt;
+              localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
+            }
+
             // Even if data is identical, if we were in 'error' status but local polling is succeeding, 
             // promote status to 'simulator' to clear the scary red warning badge!
             if (syncStatus === 'error') {
