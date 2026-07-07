@@ -377,7 +377,12 @@ export default function App() {
     }, (err: any) => {
       console.warn('Firestore subscription connection issue/error:', err);
       
-      const isQuotaExceeded = err && (err.code === 'quota-exceeded' || (err.message && err.message.toLowerCase().includes('quota')));
+      const isQuotaExceeded = err && (
+        err.code === 'quota-exceeded' || 
+        err.code === 'resource-exhausted' || 
+        (err.message && err.message.toLowerCase().includes('quota')) || 
+        (err.message && err.message.toLowerCase().includes('exhausted'))
+      );
       if (isQuotaExceeded) {
         console.warn('Firestore subscription failed due to quota limit. Switching to local-db fallback...');
         setSyncStatus('simulator');
@@ -557,7 +562,12 @@ export default function App() {
       console.warn('Failed manual pull from Firestore, attempting fallback to local server-side backup API...', err);
       setIsLoadingData(false);
       
-      const isQuotaExceeded = err && (err.code === 'quota-exceeded' || (err.message && err.message.toLowerCase().includes('quota')));
+      const isQuotaExceeded = err && (
+        err.code === 'quota-exceeded' || 
+        err.code === 'resource-exhausted' || 
+        (err.message && err.message.toLowerCase().includes('quota')) || 
+        (err.message && err.message.toLowerCase().includes('exhausted'))
+      );
       const errReason = isQuotaExceeded 
         ? 'Kuota server awan terlampaui. Menggunakan basis data cadangan lokal.' 
         : (err?.message || 'Gagal mengambil data terbaru dari server awan');
@@ -731,7 +741,12 @@ export default function App() {
             })
             .catch((err) => {
               console.error('Failed to save to Firestore, trying local server backup fallback:', err);
-              const isQuotaExceeded = err && (err.code === 'quota-exceeded' || (err.message && err.message.toLowerCase().includes('quota')));
+              const isQuotaExceeded = err && (
+                err.code === 'quota-exceeded' || 
+                err.code === 'resource-exhausted' || 
+                (err.message && err.message.toLowerCase().includes('quota')) || 
+                (err.message && err.message.toLowerCase().includes('exhausted'))
+              );
               if (isQuotaExceeded) {
                 setSyncErrorReason('Kuota server awan terlampaui. Menggunakan basis data cadangan lokal.');
               }
@@ -752,6 +767,99 @@ export default function App() {
 
     return () => clearTimeout(debounceTimer);
   }, [schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, syncStatus]);
+
+  // 3. High-Performance Fallback / Dual-Channel Polling Loop (1.5s speed as requested)
+  useEffect(() => {
+    let pollingInterval: any = null;
+
+    const runPoll = async () => {
+      // 1. If user is currently in the middle of typing / editing (isLocalChange is true),
+      // we must skip parsing incoming poll data to prevent overwriting their unsaved inputs.
+      const currentLocalStateStr = localDbStateRef.current ? JSON.stringify(localDbStateRef.current) : null;
+      const hasPendingLocalChange = isLocalChange.current || (currentLocalStateStr && currentLocalStateStr !== lastSyncedData.current);
+      
+      if (hasPendingLocalChange) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/local-db');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const localData = await response.json();
+        if (localData && localData.success) {
+          const dbState = {
+            schools: localData.schools || initialSchools,
+            operators: localData.operators || initialOperators,
+            monthlyPagu: localData.monthlyPagu || initialMonthlyPagu,
+            rabList: localData.rabList || initialRAB,
+            transactions: localData.transactions || initialTransactions,
+            tarikTunaiList: localData.tarikTunaiList || initialTarikTunai,
+            systemConfig: localData.systemConfig || defaultSystemConfig
+          };
+
+          const dbStateStr = JSON.stringify(dbState);
+
+          // If the fetched state is different from what we last synced, update local state
+          if (dbStateStr !== lastSyncedData.current) {
+            console.log('Local DB polling updated state successfully from server backup (1.5s real-time).');
+            isLocalChange.current = false;
+            lastSyncedData.current = dbStateStr;
+
+            rawSetSchools(dbState.schools);
+            rawSetOperators(dbState.operators);
+            rawSetMonthlyPagu(dbState.monthlyPagu);
+            rawSetRabList(dbState.rabList);
+            rawSetTransactions(dbState.transactions);
+            rawSetTarikTunaiList(dbState.tarikTunaiList);
+            rawSetSystemConfig(dbState.systemConfig);
+
+            // Sync with localStorage
+            localStorage.setItem('perbala_schools', JSON.stringify(dbState.schools));
+            localStorage.setItem('perbala_operators', JSON.stringify(dbState.operators));
+            localStorage.setItem('perbala_monthly_pagu', JSON.stringify(dbState.monthlyPagu));
+            localStorage.setItem('perbala_rab', JSON.stringify(dbState.rabList));
+            localStorage.setItem('perbala_transactions', JSON.stringify(dbState.transactions));
+            localStorage.setItem('perbala_tarik_tunai', JSON.stringify(dbState.tarikTunaiList));
+            localStorage.setItem('perbala_org_name', dbState.systemConfig.org_name);
+            localStorage.setItem('perbala_logo_preset', dbState.systemConfig.logo_preset);
+            localStorage.setItem('perbala_logo_url', dbState.systemConfig.logo_url || '');
+            localStorage.setItem('perbala_deadline_t1', dbState.systemConfig.deadline_t1);
+            localStorage.setItem('perbala_deadline_t2', dbState.systemConfig.deadline_t2);
+
+            setLastSyncTime(new Date());
+            isInitialLoaded.current = true;
+
+            // If we are in 'error' state but local-db is working, we can transition to 'simulator' (Local Sync Active)
+            if (syncStatus === 'error') {
+              setSyncStatus('simulator');
+              setSyncErrorReason('Kuota server awan terlampaui atau terputus. Menggunakan sinkronisasi cadangan lokal.');
+            }
+          } else {
+            // Even if data is identical, if we were in 'error' status but local polling is succeeding, 
+            // promote status to 'simulator' to clear the scary red warning badge!
+            if (syncStatus === 'error') {
+              setSyncStatus('simulator');
+              setSyncErrorReason('Kuota server awan terlampaui atau terputus. Menggunakan sinkronisasi cadangan lokal.');
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Local DB polling failed:', err);
+      }
+    };
+
+    // Run immediately and then poll every 1500ms
+    runPoll();
+    pollingInterval = setInterval(runPoll, 1500);
+
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [syncStatus]);
 
   // Toast Helpers
   const addToast = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error') => {
