@@ -977,9 +977,9 @@ export default function App() {
             lastProcessedUpdatedAt.current = incomingUpdatedAt;
             localStorage.setItem('perbala_updated_at', incomingUpdatedAt.toString());
 
-            // Even if data is identical, if we were in 'error' status but local polling is succeeding, 
-            // promote status to 'simulator' to clear the scary red warning badge!
-            if (syncStatus === 'error') {
+            // Even if data is identical, if we were in 'error' or 'offline' status but local polling is succeeding, 
+            // promote status to 'simulator' to clear the scary red warning badge/luring state!
+            if (syncStatus === 'error' || syncStatus === 'offline') {
               setSyncStatus('simulator');
               setSyncErrorReason('Kuota server awan terlampaui atau terputus. Menggunakan sinkronisasi cadangan lokal.');
             }
@@ -1098,8 +1098,8 @@ export default function App() {
           setLastSyncTime(new Date());
           isInitialLoaded.current = true;
 
-          // If we are in 'error' state but local-db is working, we can transition to 'simulator' (Local Sync Active)
-          if (syncStatus === 'error') {
+          // If we are in 'error' or 'offline' state but local-db is working, we can transition to 'simulator' (Local Sync Active)
+          if (syncStatus === 'error' || syncStatus === 'offline') {
             setSyncStatus('simulator');
             setSyncErrorReason('Kuota server awan terlampaui atau terputus. Menggunakan sinkronisasi cadangan lokal.');
           }
