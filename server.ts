@@ -14,6 +14,9 @@ const DATA_DIR = path.join(process.cwd(), 'src', 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const DATABASE_FILE = path.join(DATA_DIR, 'database.json');
 
+// Global timestamp to keep track of Cloud SQL real-time updates across client sessions
+let globalUpdatedAt = Date.now();
+
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -191,7 +194,11 @@ app.post('/api/config', async (req, res) => {
 app.get('/api/local-db', async (req, res) => {
   try {
     const db = await loadDatabase();
-    res.json({ success: true, ...db });
+    res.json({ 
+      success: true, 
+      ...db, 
+      updatedAt: db.updatedAt || globalUpdatedAt 
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -203,6 +210,8 @@ app.post('/api/local-db', async (req, res) => {
   
   try {
     const current = await loadDatabase();
+    const commitTime = updatedAt || Date.now();
+    globalUpdatedAt = commitTime;
     
     const updated = {
       schools: schools || current.schools || initialSchools,
@@ -212,7 +221,7 @@ app.post('/api/local-db', async (req, res) => {
       transactions: transactions || current.transactions || initialTransactions,
       tarikTunaiList: tarikTunaiList || current.tarikTunaiList || initialTarikTunai,
       systemConfig: systemConfig || current.systemConfig || defaultSystemConfig,
-      updatedAt: updatedAt || current.updatedAt || Date.now()
+      updatedAt: commitTime
     };
     
     await saveDatabase(updated);

@@ -394,7 +394,10 @@ export default function App() {
           const hasAnyLocalModifications = localSchoolsModified || localOperatorsModified || localMonthlyPaguModified || localRabModified || localTransactionsModified || localTarikTunaiModified || localSystemConfigModified;
           isLocalChange.current = hasAnyLocalModifications;
 
-          lastSyncedData.current = JSON.stringify(mergedState);
+          // Crucial fix: If there are unsaved local modifications, we do NOT set lastSyncedData to the merged state
+          // because doing so trick-resets the debounce save-check. Instead, we set lastSyncedData to the remote state (dbStateStr)
+          // so that the debounce save effect knows there is still an unsaved difference between local state and the server!
+          lastSyncedData.current = hasAnyLocalModifications ? dbStateStr : JSON.stringify(mergedState);
         } else {
           // No baseline yet, adopt remote state entirely
           lastSyncedData.current = dbStateStr;
@@ -474,7 +477,7 @@ export default function App() {
         setSyncErrorReason('Kuota server awan terlampaui. Menggunakan basis data cadangan lokal.');
         
         if (!isInitialLoaded.current) {
-          fetch(window.location.origin + '/api/local-db')
+          fetch('/api/local-db')
             .then((res) => res.json())
             .then((localData) => {
               if (localData && localData.success) {
@@ -678,7 +681,7 @@ export default function App() {
         : (err?.message || 'Gagal mengambil data terbaru dari server awan');
       
       try {
-        const response = await fetch(window.location.origin + '/api/local-db');
+        const response = await fetch('/api/local-db');
         const localData = await response.json();
         
         if (localData && localData.success) {
@@ -793,7 +796,7 @@ export default function App() {
     currentUpdatedAt = lastProcessedUpdatedAt.current
   ) => {
     try {
-      const response = await fetch(window.location.origin + '/api/local-db', {
+      const response = await fetch('/api/local-db', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -865,7 +868,7 @@ export default function App() {
 
     if (!isLocalChange.current) return; // STRICTLY Gated: Only save if there was a user-initiated change
 
-    // Debounce cloud persistence by 1.5 seconds to prevent rate limiting & save collision issues
+    // Debounce cloud persistence by 300ms to prevent rate limiting & save collision issues
     const debounceTimer = setTimeout(() => {
       if (currentDbStateStr !== lastSyncedData.current) {
         lastSyncedData.current = currentDbStateStr;
@@ -931,7 +934,7 @@ export default function App() {
             });
         }
       }
-    }, 1500);
+    }, 300);
 
     return () => clearTimeout(debounceTimer);
   }, [schools, operators, monthlyPagu, rabList, transactions, tarikTunaiList, systemConfig, syncStatus]);
@@ -942,7 +945,7 @@ export default function App() {
 
     const runPoll = async () => {
       try {
-        const response = await fetch(window.location.origin + '/api/local-db');
+        const response = await fetch('/api/local-db');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -1058,7 +1061,10 @@ export default function App() {
             const hasAnyLocalModifications = localSchoolsModified || localOperatorsModified || localMonthlyPaguModified || localRabModified || localTransactionsModified || localTarikTunaiModified || localSystemConfigModified;
             isLocalChange.current = hasAnyLocalModifications;
 
-            lastSyncedData.current = JSON.stringify(mergedState);
+            // Crucial fix: If there are unsaved local modifications, we do NOT set lastSyncedData to the merged state
+            // because doing so trick-resets the debounce save-check. Instead, we set lastSyncedData to the remote state (dbStateStr)
+            // so that the debounce save effect knows there is still an unsaved difference between local state and the server!
+            lastSyncedData.current = hasAnyLocalModifications ? dbStateStr : JSON.stringify(mergedState);
           } else {
             // No baseline yet, adopt remote state entirely
             lastSyncedData.current = dbStateStr;
@@ -1103,9 +1109,9 @@ export default function App() {
       }
     };
 
-    // Run immediately and then poll every 1500ms
+    // Run immediately and then poll every 1000ms
     runPoll();
-    pollingInterval = setInterval(runPoll, 1500);
+    pollingInterval = setInterval(runPoll, 1000);
 
     return () => {
       if (pollingInterval) {
