@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
+import { loadCloudDatabase, saveCloudDatabase } from './src/db/operations.ts';
 
 const app = express();
 const PORT = 3000;
@@ -124,6 +125,15 @@ const loadDatabase = async () => {
     systemConfig: defaultSystemConfig
   };
 
+  if (process.env.SQL_HOST) {
+    try {
+      console.log('Loading database from Cloud SQL (PostgreSQL)...');
+      return await loadCloudDatabase();
+    } catch (err) {
+      console.error('Failed to load from Cloud SQL, falling back to local file backup:', err);
+    }
+  }
+
   return readJsonFile(DATABASE_FILE, defaultDb);
 };
 
@@ -131,6 +141,15 @@ const loadDatabase = async () => {
 const saveDatabase = async (dbData: any) => {
   // Always write to local file as backup
   writeJsonFile(DATABASE_FILE, dbData);
+
+  if (process.env.SQL_HOST) {
+    try {
+      console.log('Saving database to Cloud SQL (PostgreSQL)...');
+      await saveCloudDatabase(dbData);
+    } catch (err) {
+      console.error('Failed to save to Cloud SQL:', err);
+    }
+  }
 };
 
 // --- API Endpoints ---
