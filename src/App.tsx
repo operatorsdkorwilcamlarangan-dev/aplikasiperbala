@@ -474,7 +474,7 @@ export default function App() {
         setSyncErrorReason('Kuota server awan terlampaui. Menggunakan basis data cadangan lokal.');
         
         if (!isInitialLoaded.current) {
-          fetch('/api/local-db')
+          fetch(window.location.origin + '/api/local-db')
             .then((res) => res.json())
             .then((localData) => {
               if (localData && localData.success) {
@@ -678,7 +678,7 @@ export default function App() {
         : (err?.message || 'Gagal mengambil data terbaru dari server awan');
       
       try {
-        const response = await fetch('/api/local-db');
+        const response = await fetch(window.location.origin + '/api/local-db');
         const localData = await response.json();
         
         if (localData && localData.success) {
@@ -752,12 +752,19 @@ export default function App() {
             if (cachedTarik) rawSetTarikTunaiList(JSON.parse(cachedTarik));
             
             setSyncStatus('offline');
-            setSyncErrorReason('Perangkat sedang luring. Menggunakan basis data luring perangkat.');
+            const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+            const offlineReason = isOnline 
+              ? 'Sistem dialihkan ke luring karena server awan & cadangan tidak merespon saat ini.'
+              : 'Perangkat sedang luring. Menggunakan basis data luring perangkat.';
+            setSyncErrorReason(offlineReason);
             setLastSyncTime(new Date());
             isInitialLoaded.current = true;
             
             if (isManual) {
-              addToast('Mode Luring Aktif', 'Menggunakan basis data lokal browser karena tidak ada koneksi internet.', 'warning');
+              const toastMessage = isOnline
+                ? 'Menggunakan basis data lokal browser karena server awan dan cadangan tidak merespon saat ini.'
+                : 'Menggunakan basis data lokal browser karena tidak ada koneksi internet.';
+              addToast('Mode Luring Aktif', toastMessage, 'warning');
             }
             return;
           }
@@ -786,7 +793,7 @@ export default function App() {
     currentUpdatedAt = lastProcessedUpdatedAt.current
   ) => {
     try {
-      const response = await fetch('/api/local-db', {
+      const response = await fetch(window.location.origin + '/api/local-db', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -935,7 +942,7 @@ export default function App() {
 
     const runPoll = async () => {
       try {
-        const response = await fetch('/api/local-db');
+        const response = await fetch(window.location.origin + '/api/local-db');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
