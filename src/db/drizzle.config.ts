@@ -25,14 +25,12 @@ if (!password) {
 export default defineConfig({
   schema: "./src/db/schema.ts",
   out: "./drizzle", // Output directory for migrations.
-  dialect: "postgresql",
-  schemaFilter: ["public"],
+  dialect: "mysql",
   dbCredentials: {
     host: sqlHost,
     user: user,
     password: password,
     database: sqlDbName,
-    ssl: false, // Typically false when connecting via Cloud SQL Auth Proxy.
   },
   verbose: true, // Enable verbose output.
 });

@@ -130,7 +130,7 @@ const loadDatabase = async () => {
 
   if (process.env.SQL_HOST) {
     try {
-      console.log('Loading database from Cloud SQL (PostgreSQL)...');
+      console.log('Loading database from Cloud SQL (MySQL)...');
       return await loadCloudDatabase();
     } catch (err) {
       console.error('Failed to load from Cloud SQL, falling back to local file backup:', err);
@@ -147,7 +147,7 @@ const saveDatabase = async (dbData: any) => {
 
   if (process.env.SQL_HOST) {
     try {
-      console.log('Saving database to Cloud SQL (PostgreSQL)...');
+      console.log('Saving database to Cloud SQL (MySQL)...');
       await saveCloudDatabase(dbData);
     } catch (err) {
       console.error('Failed to save to Cloud SQL:', err);

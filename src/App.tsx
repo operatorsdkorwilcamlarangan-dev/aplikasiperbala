@@ -282,6 +282,7 @@ export default function App() {
         retryTimeoutRef.current = null;
       }
       setSyncErrorReason(null);
+      isCloudUnavailable.current = false;
 
       if (snapshot.exists()) {
         const data = snapshot.data();
@@ -944,6 +945,11 @@ export default function App() {
     let pollingInterval: any = null;
 
     const runPoll = async () => {
+      // If we are actively connected to the real-time Firestore cloud database, 
+      // bypass polling the local backup database server to prevent stale data conflicts.
+      if (syncStatus === 'active') {
+        return;
+      }
       try {
         const response = await fetch('/api/local-db');
         if (!response.ok) {

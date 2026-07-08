@@ -146,8 +146,7 @@ export async function saveCloudDatabase(data: any) {
       if (data.systemConfig) {
         await tx.insert(schema.systemConfig)
           .values({ id: 1, ...data.systemConfig })
-          .onConflictDoUpdate({
-            target: schema.systemConfig.id,
+          .onDuplicateKeyUpdate({
             set: data.systemConfig
           });
       }
