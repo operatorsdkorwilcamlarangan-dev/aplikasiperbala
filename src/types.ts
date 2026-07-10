@@ -41,6 +41,7 @@ export interface Transaction {
   id: string;
   rab_id: string;
   nama_barang: string;
+  kode_bayar?: string;
   sekolah: string;
   npsn: string;
   kategori: 'BUKU' | 'ALAT' | 'SIPLAH';

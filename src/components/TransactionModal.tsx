@@ -33,6 +33,7 @@ export default function TransactionModal({
   const [kategori, setKategori] = useState<'BUKU' | 'ALAT' | 'SIPLAH'>('BUKU');
   const [rabId, setRabId] = useState('');
   const [namaBarang, setNamaBarang] = useState('');
+  const [kodeBayar, setKodeBayar] = useState('');
   const [jumlah, setJumlah] = useState('');
   const [totalBiaya, setTotalBiaya] = useState(0);
   const [tanggal, setTanggal] = useState('');
@@ -67,6 +68,7 @@ export default function TransactionModal({
       setKategori(initialData.kategori);
       setRabId(initialData.rab_id);
       setNamaBarang(initialData.nama_barang);
+      setKodeBayar(initialData.kode_bayar || '');
       setJumlah(initialData.jumlah);
       setTotalBiaya(initialData.total_biaya);
       setTanggal(initialData.tanggal);
@@ -76,6 +78,7 @@ export default function TransactionModal({
       setKategori('BUKU');
       setRabId('');
       setNamaBarang('');
+      setKodeBayar('');
       setJumlah('');
       setTotalBiaya(0);
       setTanggal(new Date().toISOString().split('T')[0]);
@@ -116,6 +119,7 @@ export default function TransactionModal({
       id: finalId,
       rab_id: rabId,
       nama_barang: namaBarang,
+      kode_bayar: kodeBayar,
       sekolah: currentUser.role !== 'Admin' ? currentUser.instansi : sekolah,
       npsn,
       kategori,
@@ -229,6 +233,17 @@ export default function TransactionModal({
               value={namaBarang}
               onChange={(e) => setNamaBarang(e.target.value)}
               placeholder="Contoh: Pembelian Buku Paket Kurmer Matematika"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-purple-500 font-semibold"
+            />
+          </div>
+
+          <div>
+            <label className="block text-slate-600 mb-1 font-semibold">Kode Bayar / VA</label>
+            <input
+              type="text"
+              value={kodeBayar}
+              onChange={(e) => setKodeBayar(e.target.value)}
+              placeholder="Masukkan kode bayar atau Virtual Account jika ada (opsional)"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-purple-500 font-semibold"
             />
           </div>

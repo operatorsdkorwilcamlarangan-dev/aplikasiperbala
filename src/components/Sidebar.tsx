@@ -226,31 +226,25 @@ export default function Sidebar({
         </div>
 
         {/* Role Simulator button */}
-        <div className="pt-4 border-t border-white/5">
-          <span className="block px-4 text-[9px] font-black text-purple-300 uppercase tracking-widest mb-2">ROLE SIMULATOR</span>
-          <div className="bg-black/25 p-1.5 rounded-xl flex gap-1 border border-white/5">
-            <button
-              onClick={() => onRoleSwitch('Admin')}
-              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
-                currentUser.role === 'Admin'
-                  ? 'text-white bg-purple-600 shadow-inner'
-                  : 'text-purple-300 hover:text-white'
-              }`}
-            >
-              Admin
-            </button>
-            <button
-              onClick={() => onRoleSwitch('Anggota')}
-              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition ${
-                currentUser.role === 'Anggota'
-                  ? 'text-white bg-teal-600 shadow-inner'
-                  : 'text-purple-300 hover:text-white'
-              }`}
-            >
-              Anggota
-            </button>
+        {currentUser.role === 'Admin' && (
+          <div className="pt-4 border-t border-white/5">
+            <span className="block px-4 text-[9px] font-black text-purple-300 uppercase tracking-widest mb-2">ROLE SIMULATOR</span>
+            <div className="bg-black/25 p-1.5 rounded-xl flex gap-1 border border-white/5">
+              <button
+                onClick={() => onRoleSwitch('Admin')}
+                className="flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition text-white bg-purple-600 shadow-inner"
+              >
+                Admin
+              </button>
+              <button
+                onClick={() => onRoleSwitch('Anggota')}
+                className="flex-1 py-1.5 rounded-lg text-[10px] font-bold text-center transition text-purple-300 hover:text-white"
+              >
+                Anggota
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* System & Config Settings */}
         {currentUser.role === 'Admin' && (

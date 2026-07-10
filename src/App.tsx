@@ -74,7 +74,8 @@ import {
   ArrowDownToLine,
   School as SchoolIcon,
   BookOpen,
-  Upload
+  Upload,
+  Search
 } from 'lucide-react';
 
 export default function App() {
@@ -202,6 +203,11 @@ export default function App() {
   const [monthFilterHabisPakai, setMonthFilterHabisPakai] = useState('SEMUA');
   const [monthFilterTarikTunai, setMonthFilterTarikTunai] = useState('SEMUA');
   const [dashboardFilterCategory, setDashboardFilterCategory] = useState('SEMUA');
+  const [dashboardTxLimit, setDashboardTxLimit] = useState<string>('5');
+  const [schoolListLimit, setSchoolListLimit] = useState<string>('all');
+  const [operatorListLimit, setOperatorListLimit] = useState<string>('all');
+  const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
+  const [operatorSearchQuery, setOperatorSearchQuery] = useState('');
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
@@ -2394,21 +2400,38 @@ export default function App() {
                 </div>
 
                 {/* Filter buttons */}
-                <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2 overflow-x-auto">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mr-2">Filter Kategori:</span>
-                  {['SEMUA', 'BUKU', 'ALAT', 'SIPLAH'].map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setDashboardFilterCategory(cat)}
-                      className={`px-3 py-1 text-xs font-bold rounded-full transition ${
-                        dashboardFilterCategory === cat
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200'
-                      }`}
+                <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 overflow-x-auto">
+                  <div className="flex items-center gap-2 overflow-x-auto">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mr-2">Filter Kategori:</span>
+                    {['SEMUA', 'BUKU', 'ALAT', 'SIPLAH'].map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setDashboardFilterCategory(cat)}
+                        className={`px-3 py-1 text-xs font-bold rounded-full transition ${
+                          dashboardFilterCategory === cat
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200'
+                        }`}
+                      >
+                        {cat === 'SEMUA' ? 'Semua' : cat}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                    <span>Tampilkan:</span>
+                    <select
+                      value={dashboardTxLimit}
+                      onChange={(e) => setDashboardTxLimit(e.target.value)}
+                      className="bg-white border border-slate-200 text-slate-600 rounded-xl py-1 px-2.5 text-xs font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition duration-150 shadow-sm"
                     >
-                      {cat === 'SEMUA' ? 'Semua' : cat}
-                    </button>
-                  ))}
+                      <option value="1">1 Baris</option>
+                      <option value="5">5 Baris</option>
+                      <option value="10">10 Baris</option>
+                      <option value="15">15 Baris</option>
+                      <option value="all">Semua</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Transactions Table */}
@@ -2429,11 +2452,18 @@ export default function App() {
                     <tbody className="divide-y divide-slate-100 font-semibold text-slate-600">
                       {filteredTransactions
                         .filter((tx) => dashboardFilterCategory === 'SEMUA' || tx.kategori === dashboardFilterCategory)
-                        .slice(0, 5)
+                        .slice(0, dashboardTxLimit === 'all' ? undefined : parseInt(dashboardTxLimit, 10))
                         .map((tx) => (
                           <tr key={tx.id} className="hover:bg-slate-50 transition duration-150">
                             <td className="py-3.5 px-6 font-mono text-slate-500">{tx.id}</td>
-                            <td className="py-3.5 px-6 text-slate-800 font-bold">{tx.nama_barang}</td>
+                            <td className="py-3.5 px-6">
+                              <div className="text-slate-800 font-bold">{tx.nama_barang}</div>
+                              {tx.kode_bayar && (
+                                <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                  VA/Kode: <span className="font-bold text-purple-600">{tx.kode_bayar}</span>
+                                </div>
+                              )}
+                            </td>
                             <td className="py-3.5 px-6 text-slate-500">{tx.sekolah}</td>
                             <td className="py-3.5 px-6">
                               <span className={`px-2 py-0.5 rounded text-[9px] font-black tracking-wider ${
@@ -2471,7 +2501,21 @@ export default function App() {
                   <h3 className="text-base font-extrabold text-slate-800">Daftar Lembaga Sekolah Mitra</h3>
                   <p className="text-xs text-slate-500">Manajemen rincian data lembaga dan limit pagu</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 mr-2">
+                    <span>Tampilkan:</span>
+                    <select
+                      value={schoolListLimit}
+                      onChange={(e) => setSchoolListLimit(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 text-slate-600 rounded-xl py-2 px-3.5 text-xs font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition duration-150 shadow-sm"
+                    >
+                      <option value="1">1</option>
+                      <option value="5">5</option>
+                      <option value="10">10</option>
+                      <option value="15">15</option>
+                      <option value="all">Semua</option>
+                    </select>
+                  </div>
                   <button
                     onClick={() => {
                       setImportType('schools');
@@ -2493,6 +2537,30 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Search Bar */}
+              <div className="flex items-center gap-2 max-w-md">
+                <div className="relative flex-1">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                    <Search className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Cari NPSN, Nama Sekolah, Kecamatan..."
+                    value={schoolSearchQuery}
+                    onChange={(e) => setSchoolSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 rounded-xl py-2 pl-9 pr-8 text-xs font-semibold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition duration-150 shadow-sm"
+                  />
+                  {schoolSearchQuery && (
+                    <button
+                      onClick={() => setSchoolSearchQuery('')}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -2509,8 +2577,18 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-600 font-semibold">
-                    {schools.map((sch) => {
-                      const totalPagu = sch.pagu_t1 + sch.pagu_t2;
+                    {schools
+                      .filter((sch) => {
+                        const q = schoolSearchQuery.toLowerCase();
+                        return (
+                          sch.npsn.toLowerCase().includes(q) ||
+                          sch.nama.toLowerCase().includes(q) ||
+                          sch.kecamatan.toLowerCase().includes(q)
+                        );
+                      })
+                      .slice(0, schoolListLimit === 'all' ? undefined : parseInt(schoolListLimit, 10))
+                      .map((sch) => {
+                        const totalPagu = sch.pagu_t1 + sch.pagu_t2;
                       return (
                         <tr key={sch.npsn} className="hover:bg-slate-50 transition duration-150">
                           <td className="py-3 px-4 font-mono font-bold text-slate-500">{sch.npsn}</td>
@@ -2559,7 +2637,21 @@ export default function App() {
                   <h3 className="text-base font-extrabold text-slate-800">Daftar Operator Sistem</h3>
                   <p className="text-xs text-slate-500">Manajemen hak akses & operator dinas / sekolah</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 mr-2">
+                    <span>Tampilkan:</span>
+                    <select
+                      value={operatorListLimit}
+                      onChange={(e) => setOperatorListLimit(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 text-slate-600 rounded-xl py-2 px-3.5 text-xs font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition duration-150 shadow-sm"
+                    >
+                      <option value="1">1</option>
+                      <option value="5">5</option>
+                      <option value="10">10</option>
+                      <option value="15">15</option>
+                      <option value="all">Semua</option>
+                    </select>
+                  </div>
                   <button
                     onClick={() => {
                       setImportType('operators');
@@ -2581,6 +2673,30 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Search Bar */}
+              <div className="flex items-center gap-2 max-w-md">
+                <div className="relative flex-1">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                    <Search className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Cari Nama, Username, Instansi, Peran..."
+                    value={operatorSearchQuery}
+                    onChange={(e) => setOperatorSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 rounded-xl py-2 pl-9 pr-8 text-xs font-semibold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition duration-150 shadow-sm"
+                  />
+                  {operatorSearchQuery && (
+                    <button
+                      onClick={() => setOperatorSearchQuery('')}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -2594,7 +2710,18 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-600 font-semibold">
-                    {operators.map((o) => (
+                    {operators
+                      .filter((o) => {
+                        const q = operatorSearchQuery.toLowerCase();
+                        return (
+                          o.nama.toLowerCase().includes(q) ||
+                          o.username.toLowerCase().includes(q) ||
+                          o.instansi.toLowerCase().includes(q) ||
+                          o.role.toLowerCase().includes(q)
+                        );
+                      })
+                      .slice(0, operatorListLimit === 'all' ? undefined : parseInt(operatorListLimit, 10))
+                      .map((o) => (
                       <tr key={o.username} className="hover:bg-slate-50 transition duration-150">
                         <td className="py-3 px-4 text-slate-800 font-bold">{o.nama}</td>
                         <td className="py-3 px-4 font-mono text-slate-500">{o.username}</td>
@@ -3022,7 +3149,14 @@ export default function App() {
                             <React.Fragment key={tx.id}>
                               <tr className={`hover:bg-slate-50 transition duration-150 ${isExpanded ? 'bg-purple-50/20 border-l-4 border-l-purple-500' : ''}`}>
                                 <td className="py-3 px-4 font-mono font-bold text-slate-500">{tx.id}</td>
-                                <td className="py-3 px-4 text-slate-800 font-bold">{tx.nama_barang}</td>
+                                <td className="py-3 px-4">
+                                  <div className="text-slate-800 font-bold">{tx.nama_barang}</div>
+                                  {tx.kode_bayar && (
+                                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                      VA/Kode: <span className="font-bold text-purple-600">{tx.kode_bayar}</span>
+                                    </div>
+                                  )}
+                                </td>
                                 <td className="py-3 px-4 text-slate-500">{tx.sekolah}</td>
                                 <td className="py-3 px-4">
                                   <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[9px] font-bold">
@@ -3111,6 +3245,14 @@ export default function App() {
                                             <div>
                                               <span className="text-[10px] text-slate-400 block font-bold">JUMLAH KELUARAN (VOLUME)</span>
                                               <span className="font-bold text-slate-800">{tx.jumlah}</span>
+                                            </div>
+                                            {tx.kode_bayar && (
+                                              <div>
+                                                <span className="text-[10px] text-slate-400 block font-bold">KODE BAYAR / VA</span>
+                                                <span className="font-mono font-bold text-slate-800">{tx.kode_bayar}</span>
+                                              </div>
+                                            )}
+                                            <div>
                                             </div>
                                           </div>
                                         </div>
@@ -3484,7 +3626,14 @@ export default function App() {
                         .map((item) => (
                           <tr key={item.id} className="hover:bg-slate-50 transition duration-150">
                             <td className="py-3 px-4 font-mono font-bold text-slate-500">{item.id}</td>
-                            <td className="py-3 px-4 text-slate-800 font-bold">{item.nama_barang}</td>
+                            <td className="py-3 px-4">
+                              <div className="text-slate-800 font-bold">{item.nama_barang}</div>
+                              {item.kode_bayar && (
+                                <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                  VA/Kode: <span className="font-bold text-purple-600">{item.kode_bayar}</span>
+                                </div>
+                              )}
+                            </td>
                             <td className="py-3 px-4 text-slate-500">{item.sekolah}</td>
                             <td className="py-3 px-4 font-mono text-slate-400">{item.rab_id}</td>
                             <td className="py-3 px-4 text-center">{item.jumlah}</td>
