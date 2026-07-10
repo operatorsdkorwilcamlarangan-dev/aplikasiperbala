@@ -208,6 +208,8 @@ export default function App() {
   const [operatorListLimit, setOperatorListLimit] = useState<string>('all');
   const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
   const [operatorSearchQuery, setOperatorSearchQuery] = useState('');
+  const [validasiTarikBulanFilter, setValidasiTarikBulanFilter] = useState('SEMUA');
+  const [validasiTarikStatusFilter, setValidasiTarikStatusFilter] = useState('SEMUA');
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
@@ -3447,6 +3449,61 @@ export default function App() {
                 <p className="text-xs text-slate-500">Persetujuan pencairan anggaran tunai kolektif sekolah se-Kabupaten</p>
               </div>
 
+              {/* Filter Controls */}
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
+                    Filter Sekolah / Instansi:
+                  </label>
+                  <select
+                    value={schoolFilter}
+                    onChange={(e) => setSchoolFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 text-slate-700 rounded-xl py-2 px-3.5 text-xs font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition duration-150 shadow-sm cursor-pointer"
+                  >
+                    <option value="SEMUA">Semua Sekolah (Kolektif)</option>
+                    {schools.map((sch) => (
+                      <option key={sch.npsn} value={sch.nama}>
+                        {sch.nama}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
+                    Filter Bulan:
+                  </label>
+                  <select
+                    value={validasiTarikBulanFilter}
+                    onChange={(e) => setValidasiTarikBulanFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 text-slate-700 rounded-xl py-2 px-3.5 text-xs font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition duration-150 shadow-sm cursor-pointer"
+                  >
+                    <option value="SEMUA">Semua Bulan</option>
+                    {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
+                    Filter Status:
+                  </label>
+                  <select
+                    value={validasiTarikStatusFilter}
+                    onChange={(e) => setValidasiTarikStatusFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 text-slate-700 rounded-xl py-2 px-3.5 text-xs font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition duration-150 shadow-sm cursor-pointer"
+                  >
+                    <option value="SEMUA">Semua Status</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Selesai">Disetujui / Lunas</option>
+                    <option value="Ditolak">Ditolak</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -3461,7 +3518,14 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-600 font-semibold">
-                    {tarikTunaiList.map((item) => (
+                    {tarikTunaiList
+                      .filter((item) => {
+                        const matchesSchool = isSchoolMatch(item.sekolah);
+                        const matchesBulan = validasiTarikBulanFilter === 'SEMUA' || item.bulan.toLowerCase().trim() === validasiTarikBulanFilter.toLowerCase().trim();
+                        const matchesStatus = validasiTarikStatusFilter === 'SEMUA' || item.status === validasiTarikStatusFilter;
+                        return matchesSchool && matchesBulan && matchesStatus;
+                      })
+                      .map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50 transition duration-150">
                         <td className="py-3 px-4 font-mono font-bold text-slate-500">{item.id}</td>
                         <td className="py-3 px-4 text-slate-800 font-bold">{item.sekolah}</td>
